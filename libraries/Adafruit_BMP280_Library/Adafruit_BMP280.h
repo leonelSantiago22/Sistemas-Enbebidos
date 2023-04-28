@@ -21,10 +21,12 @@
 #ifndef __BMP280_H__
 #define __BMP280_H__
 
-#include "Adafruit_Sensor.h"
-#include "Arduino.h"
-#include <SPI.h>
-#include <Wire.h>
+// clang-format off
+#include <Arduino.h>
+#include <Adafruit_Sensor.h>
+#include <Adafruit_I2CDevice.h>
+#include <Adafruit_SPIDevice.h>
+// clang-format on
 
 /*!
  *  I2C ADDRESS/BITS/SETTINGS
@@ -33,11 +35,6 @@
 #define BMP280_ADDRESS_ALT                                                     \
   (0x76)                     /**< Alternative I2C address for the sensor. */
 #define BMP280_CHIPID (0x58) /**< Default chip ID. */
-
-//  Forward declarations of Wire and SPI for board/variant combinations that
-//  don't have a default 'Wire' or 'SPI'
-extern TwoWire Wire; /**< Forward declaration of Wire object */
-extern SPIClass SPI; /**< Forward declaration of SPI object */
 
 /*!
  * Registers available on the sensor.
@@ -190,17 +187,18 @@ public:
   bool begin(uint8_t addr = BMP280_ADDRESS, uint8_t chipid = BMP280_CHIPID);
   void reset(void);
   uint8_t getStatus(void);
+  uint8_t sensorID(void);
 
   float readTemperature();
   float readPressure(void);
   float readAltitude(float seaLevelhPa = 1013.25);
   float seaLevelForAltitude(float altitude, float atmospheric);
   float waterBoilingPoint(float pressure);
+  bool takeForcedMeasurement();
 
   Adafruit_Sensor *getTemperatureSensor(void);
   Adafruit_Sensor *getPressureSensor(void);
 
-  // void takeForcedMeasurement();
   void setSampling(sensor_mode mode = MODE_NORMAL,
                    sensor_sampling tempSampling = SAMPLING_X16,
                    sensor_sampling pressSampling = SAMPLING_X16,
@@ -208,14 +206,17 @@ public:
                    standby_duration duration = STANDBY_MS_1);
 
 private:
-  TwoWire *_wire; /**< Wire object */
-  SPIClass *_spi; /**< SPI object */
+  TwoWire *_wire;                     /**< Wire object */
+  Adafruit_I2CDevice *i2c_dev = NULL; ///< Pointer to I2C bus interface
+  Adafruit_SPIDevice *spi_dev = NULL; ///< Pointer to SPI bus interface
 
   Adafruit_BMP280_Temp *temp_sensor = NULL;
   Adafruit_BMP280_Pressure *pressure_sensor = NULL;
 
   /** Encapsulates the config register */
   struct config {
+    /** Initialize to power-on-reset state */
+    config() : t_sb(STANDBY_MS_1), filter(FILTER_OFF), none(0), spi3w_en(0) {}
     /** Inactive duration (standby time) in normal mode */
     unsigned int t_sb : 3;
     /** Filter settings */
@@ -230,6 +231,9 @@ private:
 
   /** Encapsulates trhe ctrl_meas register */
   struct ctrl_meas {
+    /** Initialize to power-on-reset state */
+    ctrl_meas()
+        : osrs_t(SAMPLING_NONE), osrs_p(SAMPLING_NONE), mode(MODE_SLEEP) {}
     /** Temperature oversampling. */
     unsigned int osrs_t : 3;
     /** Pressure oversampling. */
@@ -252,9 +256,9 @@ private:
 
   uint8_t _i2caddr;
 
-  int32_t _sensorID;
+  int32_t _sensorID = 0;
   int32_t t_fine;
-  int8_t _cs, _mosi, _miso, _sck;
+  // int8_t _cs, _mosi, _miso, _sck;
   bmp280_calib_data _bmp280_calib;
   config _configReg;
   ctrl_meas _measReg;
